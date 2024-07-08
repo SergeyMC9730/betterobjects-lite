@@ -294,31 +294,6 @@ namespace PMGlobal {
 		return result;
 	}
 
-	// std::map<std::string, std::string> parseDict(std::string &object_string, char delim = ',') {
-	// 	std::vector<std::string> data = splitString(object_string.data(), delim);
-
-	// 	std::map<std::string, std::string> object_map;
-
-	// 	bool _key = true;
-
-	// 	int key;
-	// 	std::string value; 
-
-	// 	for (std::string el : data) {
-	// 		if (_key) {
-	// 			key = el;
-	// 		} else {
-	// 			value = el;
-
-	// 			object_map[key] = value;
-	// 		}
-
-	// 		_key = !_key;
-	// 	}
-
-	// 	return object_map;
-	// }
-
 	std::map<int, std::string> parseObjectData(std::string &object_string, char delim = ',') {
 		std::vector<std::string> data = splitString(object_string.data(), delim);
 
@@ -895,6 +870,11 @@ private:
 
 	bool _rootEntry = false;
 
+	EventListener<Task<Result<std::vector<std::filesystem::path>>>> _fileImportListener;
+	EventListener<Task<Result<std::filesystem::path>>> _fileExportListener;
+
+	std::vector<ListingObject> _entriesToExport;
+
 	bool tNotRestrited(int v, std::vector<int> restricted) {
 		for (int _v : restricted) {
 			if (_v == v) return false;
@@ -1227,48 +1207,18 @@ public:
 	}
 
 	void exportEntries(std::vector<ListingObject> &entries) {
-#ifdef _WIN32
-		if (entries.size() == 0) return;
+		_entriesToExport = entries;
 
-		OPENFILENAME ofn;
-		char *filename = (char *)malloc(1024);
+		struct utils::file::FilePickOptions options;
 
-		ZeroMemory(filename, 1024);
-		ZeroMemory(&ofn, sizeof(ofn));
+		struct utils::file::FilePickOptions::Filter filter = {"JSON file", {"*.json"}};
 
-		ofn.lStructSize = sizeof(ofn);
-		ofn.hwndOwner = NULL;
-		ofn.lpstrFilter = "*.json\0";
-		ofn.lpstrFile = filename;
-		ofn.nMaxFile = 1024;
-		ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
-		ofn.lpstrDefExt = "json";
+		options.filters.push_back(filter);
 
-		bool result = GetSaveFileName(&ofn);
+		auto task = utils::file::pick(utils::file::PickMode::SaveFile, options);
 
-		log::debug("GetSaveFileName={}", result);
-
-		if (!result) return;
-		
-		std::string filename_str = filename;
-		free(filename);
-
-		log::debug("filename_str={}", filename_str);
-
-		nlohmann::json json_array = nlohmann::json::array();
-
-		for (ListingObject & obj : entries) {
-			nlohmann::json jobj = obj;
-
-			json_array.push_back(jobj);
-		}
-
-		std::string data = json_array.dump();
-
-		std::ofstream out(filename_str);
-		out << data;
-		out.close();
-#endif
+		_fileExportListener.bind(this, &CustomObjectListingPopup::onExportComplete);
+		_fileExportListener.setFilter(task);
 	}
 
 	void importEntries(std::vector<ListingObject> *entries, std::string path) {
@@ -1298,6 +1248,69 @@ public:
 		}
 	}
 
+	void onExportComplete(Task<Result<std::filesystem::path>>::Event *event) {
+		if (Result<std::filesystem::path>* result = event->getValue()) {
+			if (!result->isOk()) return;
+
+			auto path = result->unwrap();
+
+			std::string filename_str = path.string();
+
+			if (!filename_str.ends_with(".json")) {
+				filename_str += ".json";
+			}
+
+			log::debug("filename_str={}", filename_str);
+
+			nlohmann::json json_array = nlohmann::json::array();
+
+			for (ListingObject & obj : _entriesToExport) {
+				nlohmann::json jobj = obj;
+
+				json_array.push_back(jobj);
+			}
+
+			std::string data = json_array.dump();
+
+			std::ofstream out(filename_str);
+			out << data;
+			out.close();
+
+			_entriesToExport.clear();
+		}
+	}
+
+	void onImportComplete(Task<Result<std::vector<std::filesystem::path>>>::Event *event) {
+		if (Result<std::vector<std::filesystem::path>>* result = event->getValue()) {
+			if (!result->isOk()) return;
+
+			auto vec = result->unwrap();
+
+			for (std::filesystem::path &path : vec) {
+				std::string filename_str = path.string();
+
+				log::debug("filename_str={}", filename_str);
+
+				std::vector<ListingObject> *objects = new std::vector<ListingObject>();
+
+				importEntries(objects, filename_str);
+
+				for (auto it = objects->begin(); it != objects->end(); ++it) {
+					if (rootHasUniqueID(it->getUniqueID())) continue;
+
+					_root._folderContainer.push_back(*it);
+				}
+
+				updateRootRecursive();
+				callCallback();
+
+				delete objects;
+			}
+			
+			rebuildFolderListing();
+		}
+	}
+
 	void onExport(CCObject *sender) {
 		std::vector<ListingObject> objects;
 
@@ -1316,49 +1329,16 @@ public:
 		exportEntries(objects);
 	}
 	void onImport(CCObject *sender) {
-#ifdef _WIN32
-		OPENFILENAME ofn;
-		char *filename = (char *)malloc(1024);
+		struct utils::file::FilePickOptions options;
 
-		ZeroMemory(filename, 1024);
-		ZeroMemory(&ofn, sizeof(ofn));
+		struct utils::file::FilePickOptions::Filter filter = {"JSON file", {"*.json"}};
 
-		ofn.lStructSize = sizeof(ofn);
-		ofn.hwndOwner = NULL;
-		ofn.lpstrFilter = "*.json\0";
-		ofn.lpstrFile = filename;
-		ofn.nMaxFile = 1024;
-		ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
-		ofn.lpstrDefExt = "json";
+		options.filters.push_back(filter);
 
-		bool result = GetOpenFileName(&ofn);
+		auto task = utils::file::pickMany(options);
 
-		log::debug("GetOpenFileName={}", result);
-
-		if (!result) return;
-		
-		std::string filename_str = filename;
-		free(filename);
-
-		log::debug("filename_str={}", filename_str);
-
-		std::vector<ListingObject> *objects = new std::vector<ListingObject>();
-
-		importEntries(objects, filename_str);
-
-		for (auto it = objects->begin(); it != objects->end(); ++it) {
-			if (rootHasUniqueID(it->getUniqueID())) continue;
-
-			_root._folderContainer.push_back(*it);
-		}
-
-		updateRootRecursive();
-		callCallback();
-
-		rebuildFolderListing();
-
-		delete objects;
-#endif
+		_fileImportListener.bind(this, &CustomObjectListingPopup::onImportComplete);
+		_fileImportListener.setFilter(task);
 	}
 
 	void setupButtons(enum ButtonsType type) {
@@ -1394,7 +1374,6 @@ public:
 
 				actions->addChild(btn);
 			}
-#ifdef _WIN32
 			{
 				auto import_spr = ButtonSprite::create("Import");
 
@@ -1408,7 +1387,6 @@ public:
 
 				actions->addChild(btn);
 			}
-#endif
 		}
 
 		if (type == BSelectZero || type == BSelectSingular || type == BSelectMutliple) {
@@ -1458,7 +1436,6 @@ public:
 				actions->addChild(btn);
 			}
 		}
-#ifdef _WIN32
 		{
 			auto share_spr = ButtonSprite::create("Export");
 
@@ -1472,7 +1449,6 @@ public:
 
 			actions->addChild(btn);
 		}
-#endif
 
 		// {
 		// 	auto close_all_spr = ButtonSprite::create("Close All");
