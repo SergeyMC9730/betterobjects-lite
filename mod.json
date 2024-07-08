@@ -1,0 +1,21 @@
+{
+	"geode": "3.2.0",
+	"gd": {
+		"win": "2.206",
+		"android": "2.206"
+	},
+	"id": "dogotrigger.partmanager",
+	"name": "BetterObjects Lite",
+	"version": "v1.0.2",
+	"developer": "dogotrigger",
+	"description": "Helper tool for mergings parts and copying objects (Public release)",
+	"dependencies": [
+		{"id": "geode.node-ids", "importance": "required", "version": ">=1.12.0"}
+	],
+	"resources": {
+		"sprites": [
+            
+        ]
+	},
+	"repository": "https://github.com/SergeyMC9730/betterobjects-lite"
+}
