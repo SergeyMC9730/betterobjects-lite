@@ -389,8 +389,8 @@ namespace PMGlobal {
 			tempArray2[k] = baseGameLayer;
 		}
 
-		std::vector v1(tempArray1.begin(), tempArray1.end());
-		std::vector v2(tempArray2.begin(), tempArray2.end());
+		gd::vector v1(tempArray1.begin(), tempArray1.end());
+		gd::vector v2(tempArray2.begin(), tempArray2.end());
 
 		GameObject *new_object = GameObject::objectFromVector(
 			v1, v2, baseGameLayer, false
@@ -1401,8 +1401,8 @@ public:
 
 				actions->addChild(btn);
 			}
-		}
 #endif
+		}
 
 		if (type == BSelectZero || type == BSelectSingular || type == BSelectMutliple) {
 			{
