@@ -176,7 +176,7 @@ namespace PMGlobal {
 	bool triggerButtonActivation = false;
 	bool triggerButtonDisactivation = false;
 	int touchIndex = -502;
-	gd::string _currentLevel;
+	std::string _currentLevel;
 	ListingObjectInteractionPopup *instance = nullptr;
 
 	std::array<gd::string, 595> tempArray1;
